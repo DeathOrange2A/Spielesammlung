@@ -11,6 +11,7 @@ Web-App für Spieleabende – läuft im Browser, ein Handy reicht. Mitspielende 
 - 🎲 **Kniffel**-Block – in der App würfeln (3 Würfe, Würfel halten, Punktevorschläge) oder mit eigenen Würfeln den Wurf eintippen
 - 🏆 **Abend-Ranking** über alle Spiele – Spieler einmal eintragen, alle Spiele übernehmen sie automatisch
 - 📖 Anleitungen zu allen Spielen
+- 🍺 **Guinness-Pfad Hannover** unter `/guinness/`: Karte aller Bars mit Guinness vom Fass, Preisübersicht und Abhaken für die Challenge (Fortschritt bleibt im Browser gespeichert)
 
 ## So funktioniert's
 

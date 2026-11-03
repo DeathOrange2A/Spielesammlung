@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0b09">
+<title>Guinness-Pfad Hannover</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M8 3h16l-2 26H10z' fill='%230d0b09' stroke='%23c9a25e' stroke-width='1.5'/><path d='M8.2 3h15.6l-.4 5H8.6z' fill='%23efe4cc'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Karla:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: Karte füllt den Bildschirm, darüber ein Tresen-Panel (links am Desktop, unten als Sheet am Handy). Ein Look: Stout-Schwarz mit Schaumkrone und Harfen-Gold. */
+:root {
+  --stout: #0d0b09;
+  --stout-2: #171310;
+  --stout-3: #231d18;
+  --line: #3a3027;
+  --head: #efe4cc;
+  --head-dim: #b5a993;
+  --gold: #c9a25e;
+  --gold-dim: #8f7444;
+  --ruby: #6b1f1a;
+  --font-display: "Cormorant Garamond", "Times New Roman", Georgia, serif;
+  --font-body: "Karla", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--stout);
+  color: var(--head);
+  font: 15px/1.45 var(--font-body);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+#map { position: fixed; inset: 0; background: var(--stout); }
+.leaflet-container { background: var(--stout); font-family: var(--font-body); }
+.leaflet-control-attribution { background: rgba(13,11,9,.75) !important; color: var(--head-dim) !important; font-size: 10px; }
+.leaflet-control-attribution a { color: var(--head-dim) !important; }
+.leaflet-bar a { background: var(--stout-2) !important; color: var(--head) !important; border-color: var(--line) !important; }
+.leaflet-tile-pane { filter: sepia(.25) saturate(.8); }
+
+/* Pint-Marker */
+.pint { width: 26px; height: 34px; transition: transform .15s ease; }
+.pint svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+.pint.is-active { transform: scale(1.3); }
+.pint-label {
+  position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  color: var(--head); text-shadow: 0 1px 2px #000, 0 0 4px #000; margin-top: 1px;
+}
+
+/* Panel */
+.panel {
+  position: fixed; z-index: 1000; display: flex; flex-direction: column;
+  background: var(--stout-2); border: 1px solid var(--line);
+  box-shadow: 0 10px 40px rgba(0,0,0,.55);
+}
+@media (min-width: 760px) {
+  .panel { top: 16px; left: 16px; bottom: 16px; width: 380px; border-radius: 14px; }
+  .grip { display: none; }
+}
+@media (max-width: 759px) {
+  .panel {
+    left: 0; right: 0; bottom: 0; height: 72vh; border-radius: 18px 18px 0 0; border-bottom: 0;
+    transform: translateY(calc(72vh - 168px - env(safe-area-inset-bottom, 0px)));
+    transition: transform .3s ease;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .panel.open { transform: translateY(0); }
+}
+.grip { border: 0; background: none; padding: 10px 0 2px; width: 100%; display: flex; justify-content: center; }
+.grip span { width: 42px; height: 4px; border-radius: 2px; background: var(--line); }
+
+.head { padding: 14px max(18px, env(safe-area-inset-left, 0px)) 14px max(18px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; border-bottom: 1px solid var(--line); }
+.big-pint { width: 52px; height: 70px; }
+.eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 30px; line-height: 1; margin: 2px 0 6px; text-wrap: balance; }
+.score { font-size: 13px; color: var(--head-dim); font-variant-numeric: tabular-nums; }
+.score b { color: var(--head); font-weight: 700; }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
+.stat { padding: 10px 0 10px 18px; min-width: 0; }
+.stat + .stat { border-left: 1px solid var(--line); }
+.stat dt { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--head-dim); }
+.stat dd { margin: 2px 0 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.tools { display: flex; gap: 6px; padding: 10px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 4px 11px; font-size: 13px; color: var(--head-dim); }
+.chip[aria-pressed="true"] { background: var(--head); color: var(--stout); border-color: var(--head); }
+.tools .sep { flex: 1; }
+
+.list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; overscroll-behavior: contain; }
+.row { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; padding: 11px 18px; border-bottom: 1px solid var(--stout-3); cursor: pointer; }
+.row:hover, .row.is-active { background: var(--stout-3); }
+.row.done .name { color: var(--head-dim); }
+.row .name { font-weight: 700; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .where { font-size: 12px; color: var(--head-dim); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row > div { min-width: 0; }
+.price { font-family: var(--font-display); font-size: 21px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; line-height: 1; }
+.price small { display: block; font-family: var(--font-body); font-size: 10px; letter-spacing: .08em; color: var(--head-dim); font-weight: 500; margin-top: 3px; }
+.price.unknown { color: var(--head-dim); }
+
+.check { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--gold-dim); background: transparent; display: grid; place-items: center; padding: 0; }
+.check svg { width: 14px; height: 14px; opacity: 0; }
+.done .check { background: var(--head); border-color: var(--head); }
+.done .check svg { opacity: 1; }
+
+.foot { padding: 10px 18px; font-size: 11.5px; color: var(--head-dim); border-top: 1px solid var(--line); display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.linkish { background: none; border: 0; padding: 0; color: var(--gold); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Detailkarte */
+.detail {
+  position: fixed; z-index: 1100; background: var(--stout-2); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6); padding: 18px; display: flex; flex-direction: column; gap: 12px;
+}
+@media (min-width: 760px) { .detail { top: 16px; right: 16px; width: 340px; } }
+@media (max-width: 759px) { .detail { left: 10px; right: 10px; top: calc(10px + env(safe-area-inset-top, 0px)); } }
+.detail h2 { font-family: var(--font-display); font-size: 27px; font-weight: 600; margin: 0; line-height: 1.05; padding-right: 30px; }
+.detail .addr { color: var(--head-dim); font-size: 13px; margin-top: 3px; }
+.close { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: transparent; font-size: 17px; line-height: 1; color: var(--head-dim); }
+.tap { display: flex; gap: 8px; flex-wrap: wrap; }
+.tap div { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 70px; }
+.tap dt { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--head-dim); }
+.tap dd { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.note { font-size: 12.5px; color: var(--head-dim); margin: 0; }
+.mine { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--head-dim); }
+.mine input { width: 90px; background: var(--stout); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--head); text-align: right; font-variant-numeric: tabular-nums; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border-radius: 10px; padding: 10px 14px; font-weight: 700; border: 1px solid var(--line); background: transparent; text-decoration: none; color: var(--head); display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.btn.primary { background: var(--head); color: var(--stout); border-color: var(--head); flex: 1; justify-content: center; }
+.btn.primary.is-done { background: transparent; color: var(--head); border-color: var(--gold-dim); }
+.btn.danger { color: #e2a29b; border-color: var(--ruby); }
+.stamp { font-size: 12px; color: var(--gold); }
+
+/* Hinzufügen-Modus */
+.banner { position: fixed; z-index: 1200; left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px)); background: var(--gold); color: var(--stout); padding: 9px 14px; border-radius: 99px; font-weight: 700; font-size: 13px; display: flex; gap: 10px; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,.5); max-width: calc(100vw - 32px); }
+.banner button { background: var(--stout); color: var(--head); border: 0; border-radius: 99px; padding: 3px 10px; font-size: 12px; }
+.form { display: grid; gap: 10px; }
+.form label { display: grid; gap: 4px; font-size: 12px; color: var(--head-dim); letter-spacing: .04em; }
+.form input { background: var(--stout); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--head); }
+.form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.offline { position: fixed; inset: 0; display: grid; place-items: center; color: var(--head-dim); font-size: 13px; padding: 0 24px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="map"><p class="offline" id="offline" hidden>Die Karte konnte nicht geladen werden. Die Liste funktioniert trotzdem.</p></div>
+
+<aside class="panel" id="panel" aria-label="Guinness-Liste">
+  <button class="grip" id="grip" aria-label="Liste ein- oder ausklappen"><span></span></button>
+  <header class="head">
+    <svg class="big-pint" id="bigPint" viewBox="0 0 52 70" aria-hidden="true"></svg>
+    <div>
+      <div class="eyebrow">Hannover · Challenge</div>
+      <h1>Guinness-Pfad</h1>
+      <div class="score" id="score"></div>
+    </div>
+  </header>
+  <dl class="stats">
+    <div class="stat"><dt>Günstigste</dt><dd id="sMin">–</dd></div>
+    <div class="stat"><dt>Schnitt</dt><dd id="sAvg">–</dd></div>
+    <div class="stat"><dt>Ausgegeben</dt><dd id="sSpent">–</dd></div>
+  </dl>
+  <div class="tools" role="group" aria-label="Filter und Sortierung">
+    <button class="chip" data-filter="all" aria-pressed="true">Alle</button>
+    <button class="chip" data-filter="open" aria-pressed="false">Offen</button>
+    <button class="chip" data-filter="done" aria-pressed="false">Getrunken</button>
+    <span class="sep"></span>
+    <button class="chip" id="sortBtn" aria-pressed="false">Preis ↑</button>
+  </div>
+  <ul class="list" id="list"></ul>
+  <div class="foot">
+    <span>Preise für 0,5 l vom Fass, laut Karte. Ohne Gewähr.</span>
+    <button class="linkish" id="addBtn">+ Bar eintragen</button>
+  </div>
+</aside>
+
+<section class="detail" id="detail" hidden aria-live="polite"></section>
+<div class="banner" id="banner" hidden>Tippe auf die Karte, wo die Bar liegt <button id="cancelAdd">Abbrechen</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+  // Recherchiert im November 2026 aus den Getränkekarten der Lokale und Stadtführern.
+  // p3/p4/p5 = Preis für 0,3 / 0,4 / 0,5 l in Euro, null = unbekannt.
+  const PUBS = [
+    { id: 'irish-pub', name: 'The Irish Pub', area: 'Mitte', addr: 'Brüderstraße 4', lat: 52.37625, lng: 9.73255,
+      p3: null, p4: null, p5: null, note: 'Ältester Irish Pub der Stadt (MacGowan’s). Von Guinness zweimal zum besten Irish Pub Deutschlands gekürt. Aktuellen Preis bitte selbst eintragen.' },
+    { id: 'dublin-inn', name: 'Dublin Inn', area: 'Altstadt', addr: 'Am Markte 13', lat: 52.37205, lng: 9.73490,
+      p3: 3.30, p4: null, p5: 4.90, note: 'Direkt an der Marktkirche. Auch Kilkenny und Black ’n’ Tan.' },
+    { id: 'the-harp', name: 'The Harp', area: 'Linden-Mitte', addr: 'Schwarzer Bär 1', lat: 52.36675, lng: 9.72310,
+      p3: 4.30, p4: null, p5: 6.00, note: 'Irish Pub am Schwarzen Bär, mit Küche.' },
+    { id: 'kaiser', name: 'Gaststätte Kaiser', area: 'Nordstadt', addr: 'Schaufelder Straße 27', lat: 52.38390, lng: 9.72150,
+      p3: null, p4: 5.50, p5: 6.30, note: 'Auch 0,2 l für 3,70 €. Mittags und abends geöffnet.' },
+    { id: 'alexander', name: 'Alexander', area: 'Mitte', addr: 'Prinzenstraße 10', lat: 52.37480, lng: 9.74460,
+      p3: 4.30, p4: null, p5: 6.50, note: 'Restaurant und Bar nahe Hauptbahnhof, breite Fassbierauswahl.' },
+    { id: 'curry-culum', name: 'Curry Culum', area: 'Mitte', addr: 'Postkamp 18', lat: 52.37595, lng: 9.72870,
+      p3: null, p4: null, p5: 6.20, p5unsure: true, note: 'Burger und Gin-Bar. Die Karte nennt 6,20 € ohne Größe.' },
+    { id: 'das-ei', name: 'Das Ei', area: 'Linden', addr: 'Selmastraße 9', lat: 52.36840, lng: 9.71410,
+      p3: null, p4: null, p5: null, note: 'Linden-Urgestein mit Guinness vom Fass und warmer Küche bis spät. Preis bitte eintragen.' },
+    { id: 'butjer', name: 'Butjer', area: 'Linden-Mitte', addr: 'Falkenstraße 11', lat: 52.36950, lng: 9.71820,
+      p3: null, p4: null, p5: null, note: 'Burgerbar und Pub mit Guinness vom Hahn. Preis bitte eintragen.' },
+  ];
+
+  const KEY = 'guinness-pfad-hannover-v1';
+  const euro = n => n == null ? '–' : n.toFixed(2).replace('.', ',') + ' €';
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  let state = { done: {}, paid: {}, custom: [] };
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s) state = Object.assign(state, s); } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  const all = () => PUBS.concat(state.custom);
+  const byId = id => all().find(p => p.id === id);
+  // Was der Spieler bezahlt hat zählt vor dem Kartenpreis.
+  const priceOf = p => state.paid[p.id] ?? p.p5;
+
+  let filter = 'all', sortByPrice = false, activeId = null, adding = false, pendingLatLng = null;
+
+  // ---------- Pint-Grafiken ----------
+  function pintSVG(done, w = 26, h = 34) {
+    const body = done ? 'var(--stout)' : 'rgba(13,11,9,.55)';
+    const head = done ? 'var(--head)' : 'transparent';
+    return `<svg viewBox="0 0 26 34" width="${w}" height="${h}">
+      <path d="M3 2h20l-2.4 30H5.4z" fill="${body}" stroke="var(--gold)" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M3.3 2.6h19.4l-.42 5.2H3.72z" fill="${head}"/>
+    </svg>`;
+  }
+  function drawBigPint(frac) {
+    // Glas füllt sich von unten mit Stout, oben sitzt die Schaumkrone.
+    const top = 4, bottom = 66, inner = bottom - top;
+    const level = bottom - inner * frac;
+    const head = Math.min(7, inner * frac);
+    const glass = `M4 ${top}H48L44 ${bottom}H8Z`;
+    document.getElementById('bigPint').innerHTML = `
+      <defs><clipPath id="g"><path d="${glass}"/></clipPath></defs>
+      <path d="${glass}" fill="var(--stout)"/>
+      <g clip-path="url(#g)">
+        <rect x="0" y="${level}" width="52" height="${bottom - level + 2}" fill="var(--ruby)" opacity=".35"/>
+        <rect x="0" y="${level + head}" width="52" height="${Math.max(0, bottom - level - head)}" fill="#050403"/>
+        ${frac > 0 ? `<rect x="0" y="${level}" width="52" height="${head}" fill="var(--head)"/>` : ''}
+      </g>
+      <path d="${glass}" fill="none" stroke="var(--gold)" stroke-width="1.6" stroke-linejoin="round"/>`;
+  }
+
+  // ---------- Karte ----------
+  let map = null; const markers = {};
+  if (window.L) {
+    map = L.map('map', { zoomControl: false, attributionControl: true }).setView([52.3735, 9.732], 14);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, subdomains: 'abcd',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }).addTo(map);
+    map.on('click', e => { if (adding) startForm(e.latlng); });
+  } else {
+    document.getElementById('offline').hidden = false;
+  }
+
+  function placeMarker(p) {
+    if (!map) return;
+    const done = !!state.done[p.id];
+    const pr = priceOf(p);
+    const html = `<div class="pint${activeId === p.id ? ' is-active' : ''}">${pintSVG(done)}<span class="pint-label">${pr != null ? euro(pr).replace(' €', '€') : ''}</span></div>`;
+    const icon = L.divIcon({ className: '', html, iconSize: [26, 34], iconAnchor: [13, 32] });
+    if (markers[p.id]) markers[p.id].setIcon(icon);
+    else markers[p.id] = L.marker([p.lat, p.lng], { icon, title: p.name, keyboard: true }).addTo(map).on('click', () => select(p.id, false));
+    markers[p.id].setZIndexOffset(activeId === p.id ? 1000 : 0);
+  }
+
+  // ---------- Liste & Statistik ----------
+  function render() {
+    const pubs = all();
+    const doneCount = pubs.filter(p => state.done[p.id]).length;
+    document.getElementById('score').innerHTML = `<b>${doneCount}</b> von <b>${pubs.length}</b> Pints getrunken` + (doneCount === pubs.length && pubs.length ? ' · Sláinte!' : '');
+    drawBigPint(pubs.length ? doneCount / pubs.length : 0);
+
+    const prices = pubs.map(p => p.p5).filter(n => n != null);
+    document.getElementById('sMin').textContent = prices.length ? euro(Math.min(...prices)) : '–';
+    document.getElementById('sAvg').textContent = prices.length ? euro(prices.reduce((a, b) => a + b, 0) / prices.length) : '–';
+    const spent = pubs.filter(p => state.done[p.id]).map(priceOf).filter(n => n != null);
+    document.getElementById('sSpent').textContent = euro(spent.reduce((a, b) => a + b, 0));
+
+    let rows = pubs.filter(p => filter === 'all' || (filter === 'done') === !!state.done[p.id]);
+    if (sortByPrice) rows.sort((a, b) => (priceOf(a) ?? 99) - (priceOf(b) ?? 99));
+    else rows.sort((a, b) => (!!state.done[a.id] - !!state.done[b.id]) || a.name.localeCompare(b.name, 'de'));
+
+    const list = document.getElementById('list');
+    list.innerHTML = rows.map(p => {
+      const pr = priceOf(p), done = !!state.done[p.id];
+      const label = state.paid[p.id] != null ? 'bezahlt' : (p.p5unsure ? 'Größe ?' : '0,5 l');
+      return `<li class="row${done ? ' done' : ''}${activeId === p.id ? ' is-active' : ''}" data-id="${esc(p.id)}">
+        <button class="check" data-check="${esc(p.id)}" aria-pressed="${done}" aria-label="${esc(p.name)} ${done ? 'als offen markieren' : 'abhaken'}">
+          <svg viewBox="0 0 14 14"><path d="M2.5 7.5l3 3 6-7" fill="none" stroke="var(--stout)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div><span class="name">${esc(p.name)}</span><span class="where">${esc(p.addr)} · ${esc(p.area)}</span></div>
+        <div class="price${pr == null ? ' unknown' : ''}">${pr == null ? '?' : euro(pr)}<small>${pr == null ? 'Preis fehlt' : label}</small></div>
+      </li>`;
+    }).join('') || `<li class="row" style="cursor:default"><span></span><div class="where">${filter === 'done' ? 'Noch nichts abgehakt. Zeit für das erste Pint.' : 'Alles getrunken. Respekt.'}</div></li>`;
+
+    pubs.forEach(placeMarker);
+    Object.keys(markers).forEach(id => { if (!byId(id)) { markers[id].remove(); delete markers[id]; } });
+  }
+
+  function toggle(id) {
+    if (state.done[id]) delete state.done[id];
+    else state.done[id] = new Date().toISOString();
+    save(); render(); if (activeId === id) showDetail(id);
+  }
+
+  // ---------- Detail ----------
+  const detail = document.getElementById('detail');
+  function select(id, fly = true) {
+    activeId = id; render(); showDetail(id);
+    const p = byId(id);
+    if (map && p && fly) map.flyTo([p.lat, p.lng], Math.max(map.getZoom(), 15), { duration: .6 });
+    document.getElementById('panel').classList.remove('open');
+  }
+  function closeDetail() { activeId = null; detail.hidden = true; render(); }
+
+  function showDetail(id) {
+    const p = byId(id); if (!p) return;
+    const done = state.done[id];
+    const sizes = [['0,3 l', p.p3], ['0,4 l', p.p4], ['0,5 l', p.p5]].filter(s => s[1] != null);
+    const route = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.name + ', ' + p.addr + ', Hannover')}`;
+    detail.innerHTML = `
+      <button class="close" id="dClose" aria-label="Schließen">×</button>
+      <div><h2>${esc(p.name)}</h2><div class="addr">${esc(p.addr)} · ${esc(p.area)}</div></div>
+      ${sizes.length ? `<dl class="tap">${sizes.map(s => `<div><dt>${s[0]}</dt><dd>${euro(s[1])}</dd></div>`).join('')}</dl>` : ''}
+      ${p.note ? `<p class="note">${esc(p.note)}</p>` : ''}
+      <label class="mine" for="paid">Mein Preis für das Pint
+        <input id="paid" inputmode="decimal" placeholder="z. B. 5,90" value="${state.paid[id] != null ? String(state.paid[id]).replace('.', ',') : ''}">
+      </label>
+      ${done ? `<div class="stamp">Abgehakt am ${new Date(done).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })}</div>` : ''}
+      <div class="actions">
+        <button class="btn primary${done ? ' is-done' : ''}" id="dToggle">${done ? 'Doch nicht getrunken' : 'Pint getrunken ✓'}</button>
+        <a class="btn" href="${route}" target="_blank" rel="noopener">Route</a>
+      </div>
+      ${p.custom ? `<div class="confirm" id="delWrap"><button class="linkish" id="dDel">Eigenen Eintrag löschen</button></div>` : ''}`;
+    detail.hidden = false;
+    document.getElementById('dClose').onclick = closeDetail;
+    document.getElementById('dToggle').onclick = () => toggle(id);
+    document.getElementById('paid').onchange = e => {
+      const v = parseFloat(e.target.value.replace(',', '.'));
+      if (isNaN(v)) delete state.paid[id]; else state.paid[id] = Math.round(v * 100) / 100;
+      save(); render();
+    };
+    const del = document.getElementById('dDel');
+    if (del) del.onclick = () => {
+      document.getElementById('delWrap').innerHTML = `Wirklich löschen? <button class="btn danger" id="dDelYes">Löschen</button> <button class="linkish" id="dDelNo">Behalten</button>`;
+      document.getElementById('dDelNo').onclick = () => showDetail(id);
+      document.getElementById('dDelYes').onclick = () => {
+        state.custom = state.custom.filter(c => c.id !== id); delete state.done[id]; delete state.paid[id];
+        save(); closeDetail();
+      };
+    };
+  }
+
+  // ---------- Eigene Bar hinzufügen ----------
+  const banner = document.getElementById('banner');
+  document.getElementById('addBtn').onclick = () => {
+    if (!map) return;
+    adding = true; banner.hidden = false; detail.hidden = true;
+    document.getElementById('panel').classList.remove('open');
+    map.getContainer().style.cursor = 'crosshair';
+  };
+  function stopAdding() { adding = false; banner.hidden = true; if (map) map.getContainer().style.cursor = ''; }
+  document.getElementById('cancelAdd').onclick = stopAdding;
+
+  function startForm(latlng) {
+    stopAdding(); pendingLatLng = latlng; activeId = null;
+    detail.innerHTML = `
+      <button class="close" id="dClose" aria-label="Schließen">×</button>
+      <h2>Neue Bar</h2>
+      <form class="form" id="newForm">
+        <label for="nName">Name<input id="nName" required placeholder="z. B. Zum Schwarzen Pint"></label>
+        <div class="pair">
+          <label for="nAddr">Adresse<input id="nAddr" placeholder="Straße Nr."></label>
+          <label for="nPrice">Preis 0,5 l<input id="nPrice" inputmode="decimal" placeholder="6,00"></label>
+        </div>
+        <button class="btn primary" type="submit">Eintragen</button>
+      </form>`;
+    detail.hidden = false;
+    document.getElementById('dClose').onclick = closeDetail;
+    document.getElementById('nName').focus();
+    document.getElementById('newForm').onsubmit = e => {
+      e.preventDefault();
+      const name = document.getElementById('nName').value.trim(); if (!name) return;
+      const price = parseFloat(document.getElementById('nPrice').value.replace(',', '.'));
+      const p = { id: 'c' + Date.now().toString(36), name, area: 'eigener Eintrag', addr: document.getElementById('nAddr').value.trim() || 'ohne Adresse',
+        lat: pendingLatLng.lat, lng: pendingLatLng.lng, p3: null, p4: null, p5: isNaN(price) ? null : price, custom: true, note: '' };
+      state.custom.push(p); save(); select(p.id, false);
+    };
+  }
+
+  // ---------- Bedienung ----------
+  document.getElementById('list').addEventListener('click', e => {
+    const c = e.target.closest('[data-check]');
+    if (c) { e.stopPropagation(); toggle(c.dataset.check); return; }
+    const row = e.target.closest('.row[data-id]');
+    if (row) select(row.dataset.id);
+  });
+  document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => {
+    filter = b.dataset.filter;
+    document.querySelectorAll('[data-filter]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    render();
+  });
+  const sortBtn = document.getElementById('sortBtn');
+  sortBtn.onclick = () => { sortByPrice = !sortByPrice; sortBtn.setAttribute('aria-pressed', sortByPrice); render(); };
+  document.getElementById('grip').onclick = () => document.getElementById('panel').classList.toggle('open');
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { stopAdding(); if (!detail.hidden) closeDetail(); } });
+
+  render();
+})();
+</script>
+</body>
+</html>
